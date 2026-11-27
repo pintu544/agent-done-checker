@@ -33,6 +33,7 @@ export async function getCheckReport(id: string, includeTestOutput = false) {
       passed: testRuns.passed,
       failed: testRuns.failed,
       skipped: testRuns.skipped,
+      exitCode: testRuns.exitCode,
       durationMs: testRuns.durationMs,
       output: includeTestOutput ? testRuns.outputTruncated : sql<null>`null`,
     },
