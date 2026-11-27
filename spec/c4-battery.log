@@ -1,0 +1,25 @@
+=== r1-fixture ===
+http://localhost:3100/checks/84bab846-d7a9-4057-a669-751546aa31f9
+
+=== r2-fixture ===
+http://localhost:3100/checks/db57b83c-a8a8-4cfd-bd75-1c9f22883e02
+
+=== r3-fixture ===
+http://localhost:3100/checks/a78b72a6-afdf-433c-b79d-76d0e8ae4dde
+
+=== r4-c4probe ===
+http://localhost:3100/checks/22a64185-2a4e-4ada-be42-b52ef7794642
+
+=== r5-exts ===
+http://localhost:3100/checks/69ff3073-e51d-4878-9cbc-2d8aa357d5af
+
+=== r6-traps ===
+http://localhost:3100/checks/21746782-31d3-429a-92c6-be21065c5664
+
+=== r7-preservation ===
+http://localhost:3100/checks/fdb5651c-1dfe-4c1e-93fb-b937bdf76b6d
+
+=== r8-buildonly ===
+http://localhost:3100/checks/939297fb-2974-4a1f-92e9-b00bad1e76c4
+
+BATTERY DONE

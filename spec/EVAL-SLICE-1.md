@@ -239,3 +239,99 @@ re-verified with `tsc --noEmit` (clean) and `npm run build` (green).
 - The 30 KB verdict slice and the Vercel 60s budget for large checks remain
   as noted above; production pipeline behaviour for large checks is still
   unverified (needs Pintu's approval for a live production CLI run).
+
+## C4 fix verification — T-1.7 QA re-run #2 failure (27 Nov 2026)
+
+The QA re-run #2 FAILED on one new critical: **C4 — a filename token
+mentioned in unchanged context still false-Contradicts a true file-add.**
+"Added events.log with 100 lines" came back Contradicted although the file
+genuinely was added (QA check `d2952319`); the LLM had proposed Verified
+and the deterministic rule overrode it. Root cause, verified in
+`src/lib/verdict.ts`: the C3 fix treated filename-like tokens as paths only
+for a fixed extension list (`.log` not in it), and a filename mentioned in
+unchanged code elsewhere in the same diff *is* a context line, so
+`preexistingOnly` fired. This was the third round of the same failure class
+(C1 → C3 → C4), so the fix is general, not another extension added to a list.
+
+### What changed
+
+- **Any filename-shaped token is a path, never a code token**
+  (`src/lib/verdict.ts`, `isPathToken`). A token counts as a path when any
+  of these hold: (a) its extension is in the known list, (b) the diff
+  itself names it as a file path in a header (`diff --git` / `---` / `+++`,
+  parsed only before the first hunk of each file, so a removed line
+  starting with `--` is never mistaken for a header), or (c) it is
+  filename-shaped (`name.ext`, short letter extension, optionally
+  multi-dot like `archive.tar.gz`) with a prefix that is not a known code
+  object. The extension in (c) is capped at 5 letters so method names
+  (`format`, `toString`) stay code tokens, and the prefix guard
+  (`test`, `describe`, `it`, `vi`, `vitest`, `jest`, `console`, `process`,
+  `Math`, `JSON`, …) keeps `test.skip` / `console.log` / `vi.fn` as code
+  tokens. Verified by a standalone node check before the battery:
+  `test.skip`, `console.log`, `vi.fn`, `utils.format`, `v2.0`,
+  `file.123`, `Makefile` are NOT paths; `events.log`, `data.dat`,
+  `app.pem`, `archive.tar.gz`, `big-data.txt`, `README.md`, `config.yaml`,
+  `notes.csv`, `binary.bin` ARE paths.
+- **Displayed reason now reflects the final verdict.** When a deterministic
+  rule overrides the LLM proposal, the stored reason is the override's
+  cause as a sentence (e.g. "The claim's test.skip appears in the diff
+  only as unchanged context — the agent did not change it."), instead of
+  the raw LLM reason saying the opposite under the badge. The raw LLM
+  reason is still stored in `evidence.raw` for debugging (verified: the
+  skip claim's raw verdict is `verified`, its displayed reason is the
+  Contradicted cause). The downgrade note is unchanged.
+- **Preservation-claim exemption and C1 behaviour are unchanged.**
+
+Implementation note: the patch was written and applied directly (the
+Codex CLI sandbox is read-only in this VM, as in the C3 round — it cannot
+write files, so hand-applying with `tsc` + build + battery verification
+is the working route). `tsc --noEmit` clean, `npm run build` green.
+
+### Battery table (local dev server http://localhost:3100, live Neon DB + FastRouter key 2)
+
+| Run | Check | Claims | Verified | Partial | Unverified | Contradicted | Score | Key verdict |
+|-----|-------|--------|----------|---------|------------|--------------|-------|-------------|
+| 1 fixture vitest | `84bab846` | 10 | 1 | 3 | 5 | 1 | 0.10 | skip Contradicted |
+| 2 fixture vitest | `db57b83c` | 10 | 1 | 3 | 5 | 1 | 0.10 | skip Contradicted |
+| 3 fixture vitest | `a78b72a6` | 10 | 1 | 3 | 5 | 1 | 0.10 | skip Contradicted |
+| 4 C4 probe (own fixture) | `22a64185` | 2 | 2 | 0 | 0 | 0 | 1.00 | events.log + data.dat Verified |
+| 5 file-adds .log/.dat/.pem/.bin/.csv | `69ff3073` | 5 | 5 | 0 | 0 | 0 | 1.00 | all Verified |
+| 6 adversarial traps | `21746782` | 5 | 1 | 0 | 3 | 1 | 0.20 | skip Contradicted |
+| 7 preservation | `fdb5651c` | 2 | 1 | 1 | 0 | 0 | 0.50 | "Kept…" Partial, never Contradicted |
+| 8 build-only `node --check` | `939297fb` | 10 | 1 | 2 | 6 | 1 | 0.10 | skip Contradicted, comment Verified |
+
+- **C4 fixed:** run 4 scores 1.00 — "Added events.log with 100 lines"
+  is Verified on a probe built from scratch for this round (repo
+  `/tmp/adc-qa3-c4`, base `75c9936`): the base commit contains the comment
+  `// logs go to events.log` in `arithmetic.test.mjs`, and an unrelated
+  edit to that file pulls the mention line into the diff as 3-line hunk
+  context — the exact trigger from the QA report — while `events.log`
+  itself is genuinely added (100 added lines). The control `data.dat`
+  is Verified in the same check. Best report to open:
+  `https://agent-done-checker.vercel.app/checks/22a64185-2a4e-4ada-be42-b52ef7794642`.
+- **Unlisted extensions:** run 5 scores 1.00 — `app.log`, `data.dat`,
+  `cert.pem`, `blob.bin`, `rows.csv` (20 lines each, repo
+  `/tmp/adc-qa3-exts`, base `9b51280`) are all Verified.
+- **C1 preserved:** the skip claim is Contradicted in all 3 fixture runs,
+  the traps run, and the build-only run (5/5), with the downgrade note
+  naming `test.skip`. Never Verified anywhere in the battery.
+- **C2 stable:** runs 1–3 are identical in per-claim verdicts (10 claims,
+  0.10 each); the only variance is LLM reason wording on one Partial claim
+  (r2), not a verdict change. The deterministic rules carry
+  Verified/Contradicted.
+- **Traps (run 6):** absent login-flow test → Unverified; "Fixed the
+  addition test so it now passes" (passes, no diff change) → Unverified;
+  "Reduced runtime 47%" (numbers nowhere) → Unverified; control comment
+  claim → Verified. No false claim Verified.
+- **M1 holds:** build-only run scores 0.10 with the comment claim Verified.
+- **Preservation (run 7):** "Kept the division test skipped" → Partial,
+  never Contradicted (same known limitation as the C3 round: a preservation
+  claim naming no path or token caps at Partial).
+- **Cosmetic verified:** the skip claim's displayed reason is the final
+  Contradicted cause, while `evidence.raw` keeps the LLM's original
+  `verified` proposal; `GET /api/checks/[id]` serializes
+  `testRun.exitCode` (0 on the C4 probe check).
+
+Battery script + log: `spec/c4-battery.sh` / `spec/c4-battery.log`;
+C4 probe repo: `/tmp/adc-qa3-c4` (base `75c9936`); multi-extension repo:
+`/tmp/adc-qa3-exts` (base `9b51280`).
