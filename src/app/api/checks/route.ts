@@ -1,0 +1,92 @@
+import { randomUUID } from "node:crypto";
+import { after } from "next/server";
+import { db } from "@/lib/db";
+import { DIFF_LIMIT, TEST_OUTPUT_LIMIT } from "@/lib/evidence-limits";
+import { processCheck } from "@/lib/pipeline";
+import { checks, testRuns } from "@/lib/schema";
+
+const DEFAULT_ORIGIN = "https://agent-done-checker.vercel.app";
+
+function error(message: string, status = 400) {
+  return Response.json({ error: message }, { status });
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isText(value: unknown): value is string {
+  return typeof value === "string" && !value.includes("\0") &&
+    Buffer.from(value).toString("utf8") === value;
+}
+
+function isRequiredText(value: unknown): value is string {
+  return isText(value) && value.trim().length > 0;
+}
+
+function isNonnegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) &&
+    value >= 0 && value <= 2_147_483_647;
+}
+
+function reportOrigin(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.origin;
+  } catch {
+    // Use the public origin if the request has no usable URL.
+  }
+  return DEFAULT_ORIGIN;
+}
+
+export async function POST(request: Request) {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return error("Request body must be valid JSON.");
+  }
+
+  if (!isObject(body)) return error("Request body must be a JSON object.");
+  const { repo, branch, base, testCommand, diff, testRun, truncated } = body;
+  const planText = body.planText ?? body.transcript;
+  if (!isRequiredText(planText) || !isRequiredText(repo) || !isRequiredText(branch) ||
+      !isRequiredText(base) || !isRequiredText(testCommand)) {
+    return error("Provide non-empty text for planText (or transcript), repo, branch, base, and testCommand.");
+  }
+  if (!isText(diff)) return error("Provide diff as text.");
+  if (Buffer.byteLength(diff) > DIFF_LIMIT) return error("Diff exceeds 1 MB.", 413);
+  if (truncated !== undefined && typeof truncated !== "boolean") {
+    return error("The truncated flag must be true or false.");
+  }
+  if (!isObject(testRun)) return error("Provide a testRun object.");
+
+  const { command, passed, failed, skipped, durationMs, output } = testRun;
+  if (!isRequiredText(command) || !isText(output)) {
+    return error("Provide testRun.command as non-empty text and testRun.output as text.");
+  }
+  if (Buffer.byteLength(output) > TEST_OUTPUT_LIMIT) return error("Test output exceeds 200 KB.", 413);
+  if (!isNonnegativeInteger(passed) || !isNonnegativeInteger(failed) ||
+      !isNonnegativeInteger(skipped) || !isNonnegativeInteger(durationMs)) {
+    return error("Test counts and durationMs must be integers between 0 and 2147483647.");
+  }
+
+  const checkId = randomUUID();
+  try {
+    // Neon HTTP batches both inserts in one transaction.
+    await db.batch([
+      db.insert(checks).values({
+        id: checkId, userId: null, repo, branch, base, testCommand,
+        planText, diff, diffTruncated: truncated ?? false, status: "received",
+      }),
+      db.insert(testRuns).values({
+        checkId, command, passed, failed, skipped, durationMs, outputTruncated: output,
+      }),
+    ]);
+  } catch {
+    return error("Could not save the check.", 500);
+  }
+
+  after(() => processCheck(checkId));
+  return Response.json({ checkId, reportUrl: `${reportOrigin(request.url)}/checks/${checkId}` });
+}

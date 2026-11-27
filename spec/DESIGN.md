@@ -7,7 +7,7 @@ Monorepo, two parts. **Web app**: Next.js App Router + TypeScript on Vercel — 
 
 ## Data Model
 - users (id, github_id, email, plan ['solo'|'team'], checks_used_this_month, stripe_customer_id)
-- checks (id, user_id NULL in Slice 1, repo, branch, base, test_command, status ['received'|'extracting'|'verdicting'|'done'|'failed'], score, created_at)
+- checks (id, user_id NULL in Slice 1, repo, branch, base, test_command, plan_text, diff, diff_truncated, status ['received'|'extracting'|'verdicting'|'done'|'failed'], score, created_at)
 - claims (id, check_id, text, verdict ['verified'|'partial'|'unverified'|'contradicted'], evidence JSON {diff_hunks[], tests[]})
 - test_runs (id, check_id, command, passed, failed, skipped, duration_ms, output_truncated TEXT ≤200KB)
 

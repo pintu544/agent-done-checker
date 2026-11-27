@@ -1,0 +1,3 @@
+- The addition test checks that 2 + 3 equals 5.
+- The multiplication test checks that 2 × 3 equals 6.
+- The division test checks that 6 ÷ 3 equals 2.

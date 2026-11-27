@@ -4,13 +4,16 @@
 > Slices are end-to-end and demoable. Slice 1 is the first demoable slice (scaffold included).
 
 ## Slice 1 — Core check pipeline (demoable)
-- [ ] T-1.0: Scaffold: Next.js App Router + TypeScript + Tailwind, `GET /api/health` → { ok: true }; Neon Postgres via Vercel marketplace; Drizzle schema (users, checks, claims, test_runs) + SQL migrations applied via Neon HTTPS SQL API; repo public with description + topics; deploy to Vercel.
+- [x] T-1.0: Scaffold: Next.js App Router + TypeScript + Tailwind, `GET /api/health` → { ok: true }; Neon Postgres via Vercel marketplace; Drizzle schema (users, checks, claims, test_runs) + SQL migrations applied via Neon HTTPS SQL API; repo public with description + topics; deploy to Vercel.
       Done means: `gh repo view` shows description + topics; live URL returns 200 on /api/health.
       Unblocks: everything.
-- [ ] T-1.1: CLI collects evidence: read plan/transcript file, run `git diff` (branch vs base), run the test command fresh, upload evidence bundle to POST /api/checks, print report URL.
+      ✅ Verified 27 Nov 2026 ~09:05 IST: Next 16.4.6 build green; /api/health 200 locally + live https://agent-done-checker.vercel.app; Neon agent-done-checker-db via Vercel marketplace, migration 0001 applied (4 tables, 28 cols verified by query); gh repo view shows description + homepage + 7 topics, PUBLIC. Commit 6401fdd.
+- [x] T-1.1: CLI collects evidence: read plan/transcript file, run `git diff` (branch vs base), run the test command fresh, upload evidence bundle to POST /api/checks, print report URL.
       Done means: `adc check --plan plan.md --repo .` in a real repo returns a report URL.
-- [ ] T-1.2: POST /api/checks intake: validate bundle, store check + diff + test run, status transitions received → extracting → verdicting → done.
+      ✅ Verified 27 Nov 2026 ~09:40 IST: CLI run against the tiny-vitest fixture printed http://localhost:3100/checks/5ebe55d5-abb3-4c29-9f01-2db16d3a6dea; test parser read 2 passed / 0 failed / 1 skipped from vitest output. (Codex wrote the CLI; its sandbox could not install tsx — installed tsx + vitest from my shell instead.)
+- [x] T-1.2: POST /api/checks intake: validate bundle, store check + diff + test run, status transitions received → extracting → verdicting → done.
       Done means: a posted bundle appears in the DB with status done and no 500s.
+      ✅ Verified 27 Nov 2026 ~09:40 IST: check 5ebe55d5 reached status done; empty body → 400, invalid JSON → 400, unknown id → 404, no 500s. Pipeline is a placeholder (zero claims) until T-1.3/T-1.4. Migration 0002 added plan_text/diff/diff_truncated to checks; DESIGN.md updated to match.
 - [ ] T-1.3: Claim extraction via FastRouter (key 2): plan/transcript text → individual falsifiable claims stored on the check.
       Done means: a 10-claim plan yields ≥8 stored claims, each one falsifiable statement.
 - [ ] T-1.4: Verdict engine: each claim → Verified / Partial / Unverified / Contradicted, with cited diff hunks and/or test results; overall score = verified / total.

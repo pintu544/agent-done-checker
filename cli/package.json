@@ -1,0 +1,12 @@
+{
+  "name": "agent-done-checker-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "adc": "./src/index.ts"
+  },
+  "dependencies": {
+    "tsx": "^4.23.15"
+  }
+}

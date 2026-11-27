@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   doublePrecision,
   integer,
@@ -28,6 +29,9 @@ export const checks = pgTable("checks", {
   branch: text().notNull(),
   base: text().notNull(),
   testCommand: text("test_command").notNull(),
+  planText: text("plan_text"),
+  diff: text(),
+  diffTruncated: boolean("diff_truncated").notNull().default(false),
   status: text({ enum: ["received", "extracting", "verdicting", "done", "failed"] })
     .notNull().default("received"),
   score: doublePrecision(),
