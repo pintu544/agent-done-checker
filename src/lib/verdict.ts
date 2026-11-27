@@ -25,6 +25,50 @@ function normalizeLine(line: string): string {
   return line.replace(/^[+ -]/, "").replace(/\s+/g, " ").trim();
 }
 
+// File extensions recognised in claim text (code + data + docs + config).
+// This list is only the first of three path tests — see isPathToken.
+const PATH_EXT_RE = /[\w./-]+\.(?:tsx?|jsx?|mjs|mts|cts|py|go|rs|java|kts?|rb|php|cs|c|h|cpp|cc|cxx|hpp|swift|jsonc?|ya?ml|toml|xml|html?|css|scss|sass|less|md|markdown|txt|csv|tsv|sql|sh|bash|zsh|lock|env|ini|cfg|conf|proto|graphql|gql|prisma|vue|svelte|lua|pl|dart|exs?|gradle|properties)(?![\w/-]|\.[\w./-])/gi;
+
+// Dotted identifiers whose prefix is a language global or a test-framework
+// namespace — method calls, not filenames. `test.skip`, `console.log` and
+// `vi.fn` stay code tokens; any other `name.ext` shape is a filename.
+const CODE_OBJECTS = new Set([
+  "test", "describe", "it", "xdescribe", "xit", "fit", "fdescribe",
+  "suite", "bench", "vi", "vitest", "jest", "mocha",
+  "console", "process", "Math", "JSON", "Object", "Array", "String",
+  "Number", "Boolean", "Promise", "Symbol", "Reflect", "global",
+  "globalThis", "document", "window", "navigator", "location",
+  "history", "fetch", "setTimeout", "setInterval", "clearTimeout",
+  "clearInterval", "require", "module", "exports", "Buffer",
+]);
+
+// A claim token names a file — never a code token — when any of these hold:
+// (a) its extension is a known one, (b) the diff itself names it as a file
+// path in a header (the general rule: no extension list can enumerate every
+// file type), or (c) it is filename-shaped (name + short letter extension)
+// with a prefix that is not a known code object. `test.skip` fails all
+// three: `skip` is not a listed extension, it never appears as a diff
+// path, and `test` is a known code object — so it stays a code token.
+// The extension in (c) is capped at 5 letters so method names (format,
+// toString) stay code tokens.
+function isPathToken(token: string, diffPaths: Set<string>, diffBasenames: Set<string>): boolean {
+  const clean = token.replace(/^["'`]|["'`]$/g, "");
+  if (clean.match(PATH_EXT_RE)) return true;
+  const base = clean.split("/").pop() ?? clean;
+  if (diffPaths.has(clean) || diffBasenames.has(base)) return true;
+  const shape = base.match(/^([\w-]+)\.(?:[\w-]+\.)?([A-Za-z]{1,5})$/);
+  return shape !== null && !CODE_OBJECTS.has(shape[1]);
+}
+
+function toSentence(text: string): string {
+  return text.split("; ").map((part) => {
+    const trimmed = part.trim();
+    if (!trimmed) return trimmed;
+    const capped = trimmed[0].toUpperCase() + trimmed.slice(1);
+    return /[.!?]$/.test(capped) ? capped : `${capped}.`;
+  }).join(" ");
+}
+
 function matchingCitations(value: unknown, sourceLines: string[]): string[] {
   if (!Array.isArray(value)) return [];
 
@@ -100,6 +144,29 @@ For tests, copy result lines with their statuses verbatim from the test output; 
   }
 
   const diffLines = diff.split(/\r?\n/);
+  // File paths named by the diff itself, from its headers. Headers are
+  // parsed only before the first hunk of each file, so a removed line
+  // starting with `--` is never mistaken for a header. A token that is a
+  // file in this diff is a path, whatever its extension — this is what
+  // keeps a filename mentioned in passing (e.g. in an unchanged comment)
+  // from being mistaken for pre-existing code work.
+  const diffPaths = new Set<string>();
+  let inHunks = false;
+  for (const line of diffLines) {
+    if (line.startsWith("diff --git ")) {
+      inHunks = false;
+      const git = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
+      if (git) { diffPaths.add(git[1]); diffPaths.add(git[2]); }
+      continue;
+    }
+    if (line.startsWith("@@")) { inHunks = true; continue; }
+    if (inHunks) continue;
+    const from = line.match(/^--- (?:a\/)?(.+)$/);
+    if (from && from[1] !== "/dev/null") diffPaths.add(from[1]);
+    const to = line.match(/^\+\+\+ (?:b\/)?(.+)$/);
+    if (to && to[1] !== "/dev/null") diffPaths.add(to[1]);
+  }
+  const diffBasenames = new Set([...diffPaths].map((path) => path.split("/").pop() ?? path));
   const contextLines = diffLines.filter((line) => line.startsWith(" "));
   const changedLines = new Set(diffLines.filter((line) =>
     ((line.startsWith("+") && !line.startsWith("+++")) ||
@@ -140,7 +207,7 @@ For tests, copy result lines with their statuses verbatim from the test output; 
     const diff_hunks = matchingCitations(entry?.evidence?.diff_hunks, diffLines);
     const tests = matchingCitations(entry?.evidence?.tests, testLines);
     const evidence: Verdict["evidence"] = { diff_hunks, tests };
-    const reason = typeof entry?.reason === "string" ? entry.reason : "";
+    let reason = typeof entry?.reason === "string" ? entry.reason : "";
     const hasDiffChange = diff_hunks.some(showsChange);
     // Fresh-run evidence is the CLI-measured counts, not the model's
     // citations: a suite that passed (passed > 0, failed 0) is objective
@@ -153,15 +220,20 @@ For tests, copy result lines with their statuses verbatim from the test output; 
 
     // Claim tokens, shared by the absence check and the deterministic
     // falsification below. File paths are kept apart: a path token (e.g.
-    // arithmetic.test.mjs) names the file the change is in, not a code
-    // token the agent acted on.
-    const paths = claim.match(/[\w./-]+\.(?:tsx?|jsx?|mjs|mts|cts|py|go|rs|java|kts?|rb|php|cs|c|h|cpp|cc|cxx|hpp|swift|jsonc?|ya?ml|toml|xml|html?|css|scss|sass|less|md|markdown|txt|csv|tsv|sql|sh|bash|zsh|lock|env|ini|cfg|conf|proto|graphql|gql|prisma|vue|svelte|lua|pl|dart|exs?|gradle|properties)(?![\w/-]|\.[\w./-])/gi) ?? [];
+    // arithmetic.test.mjs, events.log) names the file the change is in,
+    // not a code token the agent acted on. isPathToken is general — any
+    // filename shape counts, not just listed extensions — so a file the
+    // agent genuinely added is never falsified by a passing mention of
+    // its name in unchanged code.
     const tokens = [
       ...(claim.match(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+/g) ?? []),
       ...(claim.match(/"[^"]+"|'[^']+'|`[^`]+`/g) ?? []),
     ];
-    const codeTokens = tokens.filter((token) =>
-      !paths.some((path) => path.includes(token) || token.includes(path)));
+    const paths = [
+      ...(claim.match(PATH_EXT_RE) ?? []),
+      ...tokens.filter((token) => isPathToken(token, diffPaths, diffBasenames)),
+    ].filter((value, index, all) => all.indexOf(value) === index);
+    const codeTokens = tokens.filter((token) => !isPathToken(token, diffPaths, diffBasenames));
     const preservationClaim = /\b(?:kept|keeps?|left|leaves?|remain(?:s|ed)?|still|unchanged|preserv(?:e[ds]?|ing)|untouched|as\s+before|as-is|no\s+change|did\s+not\s+(?:change|modify|touch|alter)|not\s+(?:changed|modified))\b/i.test(claim);
 
     // Deterministic falsification (a): a code token that appears in the
@@ -287,6 +359,14 @@ For tests, copy result lines with their statuses verbatim from the test output; 
         // show the run's own summary line instead of empty evidence.
         evidence.tests.push(summaryLine);
       }
+    }
+
+    // The displayed reason must describe the FINAL verdict: the raw LLM
+    // reason (kept in evidence.raw for debugging) can say the opposite
+    // when the deterministic rules overrode the proposal — e.g. a reason
+    // saying the file was added under a Contradicted badge.
+    if (cause !== undefined) {
+      reason = toSentence(cause);
     }
 
     // raw + downgrade live inside evidence so the pipeline persists them
