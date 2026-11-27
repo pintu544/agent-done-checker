@@ -6,6 +6,7 @@ import { DIFF_LIMIT, TEST_OUTPUT_LIMIT } from "@/lib/evidence-limits";
 import { processCheck } from "@/lib/pipeline";
 import { checks, testRuns } from "@/lib/schema";
 import { getSessionUser } from "@/lib/session";
+import { checkMonthlyLimit } from "@/lib/usage";
 
 const DEFAULT_ORIGIN = "https://agent-done-checker.vercel.app";
 
@@ -92,8 +93,15 @@ export async function POST(request: Request) {
 
   const checkId = randomUUID();
   try {
-    // Anonymous submissions keep demo mode working while the GitHub OAuth app is being set up.
+    // Anonymous submissions remain allowed and uncounted in demo mode.
     const user = await getSessionUser();
+    if (user) {
+      const limit = await checkMonthlyLimit(user.id);
+      if (!limit.allowed) {
+        return Response.json({ error: limit.message }, { status: 429 });
+      }
+    }
+
     // Neon HTTP batches both inserts in one transaction.
     await db.batch([
       db.insert(checks).values({

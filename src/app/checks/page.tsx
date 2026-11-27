@@ -6,6 +6,7 @@ import { listChecks } from "@/lib/check-reports";
 import { db } from "@/lib/db";
 import { claims } from "@/lib/schema";
 import { getSessionUser } from "@/lib/session";
+import { getMonthlyUsage } from "@/lib/usage";
 import { AuthControls } from "../auth-controls";
 import { CheckDate, StatusBadge } from "./check-details";
 
@@ -31,13 +32,26 @@ export default function ChecksPage() {
 async function ChecksList() {
   await io();
   const user = await getSessionUser();
-  const checks = await listChecks(user?.id);
+  const [checks, usage] = await Promise.all([
+    listChecks(user?.id),
+    user ? getMonthlyUsage(user.id) : null,
+  ]);
+  const usageSummary = usage && (
+    <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+      {usage.plan === "team"
+        ? "Team plan — unlimited checks"
+        : `${usage.used} of ${usage.limit} free checks used in ${usage.monthLabel} — resets ${usage.resetLabel}`}
+    </p>
+  );
 
   if (!checks.length) {
     return (
-      <p className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
-        No checks yet — run <code>adc check --plan plan.md --repo .</code> from your repository.
-      </p>
+      <>
+        {usageSummary}
+        <p className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
+          No checks yet — run <code>adc check --plan plan.md --repo .</code> from your repository.
+        </p>
+      </>
     );
   }
 
@@ -49,7 +63,9 @@ async function ChecksList() {
   const totals = new Map(counts.map(({ id, total }) => [id, total]));
 
   return (
-    <table className="w-full table-fixed border-collapse text-left text-sm max-md:block">
+    <>
+      {usageSummary}
+      <table className="w-full table-fixed border-collapse text-left text-sm max-md:block">
       <thead className="max-md:sr-only">
         <tr className="border-b border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
           <th scope="col" className="w-2/5 py-3 pr-4 font-medium">Repository / Branch</th>
@@ -79,5 +95,6 @@ async function ChecksList() {
         })}
       </tbody>
     </table>
+    </>
   );
 }
