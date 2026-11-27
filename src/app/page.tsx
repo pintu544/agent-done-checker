@@ -9,8 +9,8 @@ export default function Home() {
       <p className="mt-4 max-w-prose text-lg text-zinc-600 dark:text-zinc-400">
         Prove the agent actually did it — verify what a coding agent actually did: plan vs git diff vs test runs.
       </p>
-      <Link className="adc-link mt-6 inline-block font-medium" href="/checks">View checks</Link>
-      <div className="mt-4">
+      <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2">
+        <Link className="adc-link font-medium" href="/checks">View checks</Link>
         <Suspense fallback={null}>
           <AuthControls />
         </Suspense>

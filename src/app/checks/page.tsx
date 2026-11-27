@@ -1,7 +1,7 @@
 import { count, inArray } from "drizzle-orm";
 import { io } from "next/cache";
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { listChecks } from "@/lib/check-reports";
 import { db } from "@/lib/db";
 import { claims } from "@/lib/schema";
@@ -11,44 +11,57 @@ import { AuthControls } from "../auth-controls";
 import { CheckDate, StatusBadge } from "./check-details";
 
 export default function ChecksPage() {
-  return (
-    <main className="mx-auto w-full max-w-5xl px-5 py-10 sm:px-8">
-      <Link className="adc-link text-sm" href="/">Agent Done Checker</Link>
-      <h1 className="mt-6 text-3xl font-semibold tracking-tight">Checks</h1>
+  const heading = (
+    <>
+      <h1 className="text-3xl font-semibold tracking-tight">Checks</h1>
       <div className="mt-4">
         <Suspense fallback={null}>
           <AuthControls />
         </Suspense>
       </div>
-      <div className="mt-6">
-        <Suspense fallback={<p role="status">Loading checks…</p>}>
-          <ChecksList />
-        </Suspense>
-      </div>
+    </>
+  );
+
+  return (
+    <main className="mx-auto w-full max-w-5xl px-5 py-10 sm:px-8">
+      <Link className="adc-link text-sm" href="/">Agent Done Checker</Link>
+      <Suspense fallback={
+        <>
+          <header className="mt-6">{heading}</header>
+          <p className="mt-8" role="status">Loading checks…</p>
+        </>
+      }>
+        <ChecksList heading={heading} />
+      </Suspense>
     </main>
   );
 }
 
-async function ChecksList() {
+async function ChecksList({ heading }: { heading: ReactNode }) {
   await io();
   const user = await getSessionUser();
   const [checks, usage] = await Promise.all([
     listChecks(user?.id),
     user ? getMonthlyUsage(user.id) : null,
   ]);
-  const usageSummary = usage && (
-    <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-      {usage.plan === "team"
-        ? "Team plan — unlimited checks"
-        : `${usage.used} of ${usage.limit} free checks used in ${usage.monthLabel} — resets ${usage.resetLabel}`}
-    </p>
+  const header = (
+    <header className="mt-6">
+      {heading}
+      {usage && (
+        <p className="mt-2 text-sm text-zinc-600 tabular-nums dark:text-zinc-400">
+          {usage.plan === "team"
+            ? "Team plan — unlimited checks"
+            : `${usage.used} of ${usage.limit} free checks used in ${usage.monthLabel} — resets ${usage.resetLabel}`}
+        </p>
+      )}
+    </header>
   );
 
   if (!checks.length) {
     return (
       <>
-        {usageSummary}
-        <p className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
+        {header}
+        <p className="mt-8 rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
           No checks yet — run <code>adc check --plan plan.md --repo .</code> from your repository.
         </p>
       </>
@@ -64,8 +77,8 @@ async function ChecksList() {
 
   return (
     <>
-      {usageSummary}
-      <table className="w-full table-fixed border-collapse text-left text-sm max-md:block">
+      {header}
+      <table className="mt-8 w-full table-fixed border-collapse text-left text-sm max-md:block">
       <thead className="max-md:sr-only">
         <tr className="border-b border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
           <th scope="col" className="w-2/5 py-3 pr-4 font-medium">Repository / Branch</th>
@@ -78,9 +91,9 @@ async function ChecksList() {
         {checks.map(({ id, repo, branch, status, score, createdAt }) => {
           const total = totals.get(id) ?? 0;
           return (
-            <tr key={id} className="border-b border-zinc-200 dark:border-zinc-800 max-md:grid max-md:grid-cols-2 max-md:gap-x-4 max-md:gap-y-2 max-md:py-4">
+            <tr key={id} className="group border-b border-zinc-200 hover:bg-zinc-100 focus-within:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900 dark:focus-within:bg-zinc-900 max-md:grid max-md:grid-cols-2 max-md:gap-x-4 max-md:gap-y-2 max-md:py-4">
               <th scope="row" className="py-4 pr-4 font-normal wrap-anywhere max-md:col-span-2 max-md:p-0">
-                <Link href={`/checks/${id}`} className="adc-link font-medium">{repo}</Link>
+                <Link href={`/checks/${id}`} className="adc-link font-medium group-hover:decoration-current focus-visible:decoration-current">{repo}</Link>
                 <span className="mt-1 block text-zinc-600 dark:text-zinc-400">{branch}</span>
               </th>
               <td className="py-4 pr-4 max-md:p-0"><StatusBadge status={status} /></td>

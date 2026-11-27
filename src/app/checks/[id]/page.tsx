@@ -1,8 +1,10 @@
 import { io } from "next/cache";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { getCheckReport } from "@/lib/check-reports";
 import { getSessionUser } from "@/lib/session";
+import { AuthControls } from "../../auth-controls";
 import { CheckDate, StatusBadge } from "../check-details";
 
 // Blocking route (Next 16 Cache Components): the ownership check must run
@@ -45,6 +47,11 @@ function Report({ check }: { check: NonNullable<Awaited<ReturnType<typeof getChe
     <>
       <header className="mt-6">
         <h1 className="text-3xl font-semibold tracking-tight wrap-anywhere">{check.repo}</h1>
+        <div className="mt-4">
+          <Suspense fallback={null}>
+            <AuthControls />
+          </Suspense>
+        </div>
         <dl className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 text-sm wrap-anywhere sm:grid-cols-4 [&_dt]:text-zinc-600 dark:[&_dt]:text-zinc-400 [&_dd]:mt-1">
           <div><dt>Branch</dt><dd>{check.branch}</dd></div>
           <div><dt>Base</dt><dd>{check.base}</dd></div>
@@ -104,7 +111,7 @@ function Report({ check }: { check: NonNullable<Awaited<ReturnType<typeof getChe
                   <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${verdictStyles[verdict]}`}>
                     {verdict}
                   </span>
-                  <h3 className="mt-2 max-w-prose whitespace-pre-wrap font-medium">{text}</h3>
+                  <h3 className="mt-5 max-w-prose whitespace-pre-wrap font-medium">{text}</h3>
                   {evidence.absence === true && (
                     <p className="mt-2 text-sm">Claimed change is absent from the diff.</p>
                   )}
