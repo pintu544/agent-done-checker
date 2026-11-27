@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Agent Done Checker",
-  description: "Verify coding agent claims against git diffs and test runs.",
+  description: "Verify coding agent claims against git diffs and fresh test runs. See a live report and compare the Solo and Team plans.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

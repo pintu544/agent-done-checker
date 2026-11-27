@@ -6,11 +6,27 @@
 - Every claim gets a verdict: **Verified / Partial / Unverified / Contradicted**, with the diff hunks and test results cited as evidence.
 - Dashboard shows the score and the full report per check.
 
-Pricing: Solo free (10 checks/mo) / Team $20/mo.
-
 ## Status
 
-Slice 1 (core check pipeline) is being built with Codex CLI. Spec pack in `spec/` — GRILL, SPEC, DESIGN, TASKS — approved by Pintu 27 Nov 2026.
+Live demo: [Agent Done Checker](https://agent-done-checker.vercel.app)
+
+Slices 1–3 are done:
+
+- Slice 1 shipped the core check pipeline.
+- Slice 2 added accounts, the Solo usage counter, and Codex session log parsing.
+- Slice 3 added Stripe billing and the landing page.
+
+Solo is free with 10 checks/month. Team is $20/month for unlimited checks, billed via Stripe Checkout.
+
+## Run a check
+
+From the repository you want to check:
+
+```sh
+adc check --plan plan.md --repo .
+```
+
+For a Codex session log, use `adc check --codex-log <session-file> --repo .`. Add `--api <url>` to use a custom API base URL.
 
 ## Spec-driven
 
