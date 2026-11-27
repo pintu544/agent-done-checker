@@ -6,7 +6,7 @@
 Monorepo, two parts. **Web app**: Next.js App Router + TypeScript on Vercel — dashboard plus API route handlers. **CLI** (`cli/`, Node + TypeScript, run via npx/tsx in MVP): runs in the user's repo, reads the plan/transcript file, runs `git diff`, runs the test command fresh, uploads the evidence bundle to `POST /api/checks`, prints the verdict URL. **Server**: extracts claims with an LLM, matches each claim to diff hunks and test results, stores verdicts in Neon Postgres, serves the report at `/checks/[id]`. Auth via Auth.js GitHub OAuth (Slice 2). Billing via Stripe Checkout + webhooks (Slice 3).
 
 ## Data Model
-- users (id, github_id, email, plan ['solo'|'team'], checks_used_this_month, stripe_customer_id)
+- users (id, github_id, email, plan ['solo'|'team'], checks_used_this_month, checks_used_month ['YYYY-MM', Slice 2], stripe_customer_id)
 - checks (id, user_id NULL in Slice 1, repo, branch, base, test_command, plan_text, diff, diff_truncated, status ['received'|'extracting'|'verdicting'|'done'|'failed'], score, created_at)
 - claims (id, check_id, position [extraction order, migration 0003], text, verdict ['verified'|'partial'|'unverified'|'contradicted'], evidence JSON {diff_hunks[], tests[], reason?})
 - test_runs (id, check_id, command, passed, failed, skipped, duration_ms, output_truncated TEXT ≤200KB)

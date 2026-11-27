@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { getCheckReport } from "@/lib/check-reports";
+import { getSessionUser } from "@/lib/session";
 import { CheckDate, StatusBadge } from "../check-details";
 
 const verdictStyles = {
@@ -26,7 +27,8 @@ export default function CheckPage({ params }: PageProps<"/checks/[id]">) {
 async function Report({ params }: Pick<PageProps<"/checks/[id]">, "params">) {
   const { id } = await params;
   await io();
-  const check = await getCheckReport(id);
+  const user = await getSessionUser();
+  const check = await getCheckReport(id, false, user?.id);
   if (!check) notFound();
 
   const counts = { verified: 0, partial: 0, unverified: 0, contradicted: 0 };

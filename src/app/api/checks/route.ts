@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { DIFF_LIMIT, TEST_OUTPUT_LIMIT } from "@/lib/evidence-limits";
 import { processCheck } from "@/lib/pipeline";
 import { checks, testRuns } from "@/lib/schema";
+import { getSessionUser } from "@/lib/session";
 
 const DEFAULT_ORIGIN = "https://agent-done-checker.vercel.app";
 
@@ -46,7 +47,10 @@ function reportOrigin(url: string) {
 
 export async function GET() {
   await connection();
-  return Response.json(await listChecks());
+  const user = await getSessionUser();
+  return Response.json(await listChecks(user?.id), {
+    headers: { "Cache-Control": "private, no-store" },
+  });
 }
 
 export async function POST(request: Request) {
@@ -88,10 +92,12 @@ export async function POST(request: Request) {
 
   const checkId = randomUUID();
   try {
+    // Anonymous submissions keep demo mode working while the GitHub OAuth app is being set up.
+    const user = await getSessionUser();
     // Neon HTTP batches both inserts in one transaction.
     await db.batch([
       db.insert(checks).values({
-        id: checkId, userId: null, repo, branch, base, testCommand,
+        id: checkId, userId: user?.id ?? null, repo, branch, base, testCommand,
         planText, diff, diffTruncated: truncated ?? false, status: "received",
       }),
       db.insert(testRuns).values({

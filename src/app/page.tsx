@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import { AuthControls } from "./auth-controls";
 
 export default function Home() {
   return (
@@ -8,6 +10,11 @@ export default function Home() {
         Prove the agent actually did it — verify what a coding agent actually did: plan vs git diff vs test runs.
       </p>
       <Link className="adc-link mt-6 inline-block font-medium" href="/checks">View checks</Link>
+      <div className="mt-4">
+        <Suspense fallback={null}>
+          <AuthControls />
+        </Suspense>
+      </div>
       <section className="mt-12 border-t border-zinc-200 pt-8 dark:border-zinc-800">
         <h2 className="text-xl font-semibold">How it works</h2>
         <p className="mt-2 max-w-prose text-zinc-600 dark:text-zinc-400">

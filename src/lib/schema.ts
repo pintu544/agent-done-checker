@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   doublePrecision,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -17,6 +18,7 @@ export const users = pgTable("users", {
   email: text().notNull(),
   plan: text({ enum: ["solo", "team"] }).notNull().default("solo"),
   checksUsedThisMonth: integer("checks_used_this_month").notNull().default(0),
+  checksUsedMonth: text("checks_used_month"),
   stripeCustomerId: text("stripe_customer_id"),
 }, (table) => [
   check("users_plan_check", sql`${table.plan} IN ('solo', 'team')`),
@@ -39,6 +41,7 @@ export const checks = pgTable("checks", {
   score: doublePrecision(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
+  index("checks_user_id_idx").on(table.userId),
   check("checks_status_check", sql`${table.status} IN ('received', 'extracting', 'verdicting', 'done', 'failed')`),
 ]);
 

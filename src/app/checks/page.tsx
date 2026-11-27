@@ -5,6 +5,8 @@ import { Suspense } from "react";
 import { listChecks } from "@/lib/check-reports";
 import { db } from "@/lib/db";
 import { claims } from "@/lib/schema";
+import { getSessionUser } from "@/lib/session";
+import { AuthControls } from "../auth-controls";
 import { CheckDate, StatusBadge } from "./check-details";
 
 export default function ChecksPage() {
@@ -12,6 +14,11 @@ export default function ChecksPage() {
     <main className="mx-auto w-full max-w-5xl px-5 py-10 sm:px-8">
       <Link className="adc-link text-sm" href="/">Agent Done Checker</Link>
       <h1 className="mt-6 text-3xl font-semibold tracking-tight">Checks</h1>
+      <div className="mt-4">
+        <Suspense fallback={null}>
+          <AuthControls />
+        </Suspense>
+      </div>
       <div className="mt-6">
         <Suspense fallback={<p role="status">Loading checks…</p>}>
           <ChecksList />
@@ -23,7 +30,8 @@ export default function ChecksPage() {
 
 async function ChecksList() {
   await io();
-  const checks = await listChecks();
+  const user = await getSessionUser();
+  const checks = await listChecks(user?.id);
 
   if (!checks.length) {
     return (

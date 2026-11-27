@@ -1,8 +1,8 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "./db";
 import { checks, claims, testRuns } from "./schema";
 
-export function listChecks() {
+export function listChecks(viewerUserId?: string) {
   return db.select({
     id: checks.id,
     repo: checks.repo,
@@ -10,14 +10,19 @@ export function listChecks() {
     status: checks.status,
     score: checks.score,
     createdAt: checks.createdAt,
-  }).from(checks).orderBy(desc(checks.createdAt), desc(checks.id)).limit(50);
+  }).from(checks)
+    .where(viewerUserId
+      ? or(eq(checks.userId, viewerUserId), isNull(checks.userId))
+      : isNull(checks.userId))
+    .orderBy(desc(checks.createdAt), desc(checks.id)).limit(50);
 }
 
-export async function getCheckReport(id: string, includeTestOutput = false) {
+export async function getCheckReport(id: string, includeTestOutput = false, viewerUserId?: string) {
   if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) return null;
 
   const [check] = await db.select({
     id: checks.id,
+    userId: checks.userId,
     repo: checks.repo,
     branch: checks.branch,
     base: checks.base,
@@ -41,6 +46,8 @@ export async function getCheckReport(id: string, includeTestOutput = false) {
     .where(eq(checks.id, id)).limit(1);
 
   if (!check) return null;
+  const { userId, ...report } = check;
+  if (userId !== null && userId !== viewerUserId) return null;
 
   const checkClaims = await db.select({
     id: claims.id,
@@ -49,5 +56,5 @@ export async function getCheckReport(id: string, includeTestOutput = false) {
     evidence: claims.evidence,
   }).from(claims).where(eq(claims.checkId, id)).orderBy(claims.position, claims.id);
 
-  return { ...check, claims: checkClaims };
+  return { ...report, claims: checkClaims };
 }
