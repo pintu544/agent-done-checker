@@ -1,0 +1,60 @@
+import { sql } from "drizzle-orm";
+import {
+  check,
+  doublePrecision,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
+
+export const users = pgTable("users", {
+  id: uuid().defaultRandom().primaryKey(),
+  githubId: text("github_id").notNull().unique(),
+  email: text().notNull(),
+  plan: text({ enum: ["solo", "team"] }).notNull().default("solo"),
+  checksUsedThisMonth: integer("checks_used_this_month").notNull().default(0),
+  stripeCustomerId: text("stripe_customer_id"),
+}, (table) => [
+  check("users_plan_check", sql`${table.plan} IN ('solo', 'team')`),
+]);
+
+export const checks = pgTable("checks", {
+  id: uuid().defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => users.id),
+  repo: text().notNull(),
+  branch: text().notNull(),
+  base: text().notNull(),
+  testCommand: text("test_command").notNull(),
+  status: text({ enum: ["received", "extracting", "verdicting", "done", "failed"] })
+    .notNull().default("received"),
+  score: doublePrecision(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check("checks_status_check", sql`${table.status} IN ('received', 'extracting', 'verdicting', 'done', 'failed')`),
+]);
+
+export const claims = pgTable("claims", {
+  id: uuid().defaultRandom().primaryKey(),
+  checkId: uuid("check_id").notNull().references(() => checks.id),
+  text: text().notNull(),
+  verdict: text({ enum: ["verified", "partial", "unverified", "contradicted"] }).notNull(),
+  evidence: jsonb().$type<{ diff_hunks: unknown[]; tests: unknown[] }>().notNull(),
+}, (table) => [
+  check("claims_verdict_check", sql`${table.verdict} IN ('verified', 'partial', 'unverified', 'contradicted')`),
+]);
+
+export const testRuns = pgTable("test_runs", {
+  id: uuid().defaultRandom().primaryKey(),
+  checkId: uuid("check_id").notNull().references(() => checks.id),
+  command: text().notNull(),
+  passed: integer().notNull(),
+  failed: integer().notNull(),
+  skipped: integer().notNull(),
+  durationMs: integer("duration_ms").notNull(),
+  outputTruncated: text("output_truncated").notNull(),
+}, (table) => [
+  check("test_runs_output_truncated_check", sql`octet_length(${table.outputTruncated}) <= 204800`),
+]);
