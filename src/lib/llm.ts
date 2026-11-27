@@ -1,9 +1,11 @@
 // Pinned model (QA C2): fastrouter/auto routes to different models per
-// call, so identical evidence scored 0.09–0.33 across runs. Pin the dated
-// gpt-4o-mini snapshot (frozen weights — it cannot be silently swapped)
-// with temperature 0 and a fixed seed for reproducible verdicts.
-// FASTROUTER_MODEL may override the pin.
-const MODEL = process.env.FASTROUTER_MODEL || "openai/gpt-4o-mini-2024-07-18";
+// call, so identical evidence scored 0.09–0.33 across runs. Pin
+// openai/gpt-4o-mini with temperature 0 and a fixed seed for reproducible
+// verdicts. The dated snapshot openai/gpt-4o-mini-2024-07-18 is listed by
+// /v1/models but the chat endpoint rejects it with HTTP 400 ("not a valid
+// model ID or no providers found", verified live 27 Nov 2026) — the
+// unversioned alias is the routable one. FASTROUTER_MODEL may override.
+const MODEL = process.env.FASTROUTER_MODEL || "openai/gpt-4o-mini";
 
 export async function completeJSON({
   system,
