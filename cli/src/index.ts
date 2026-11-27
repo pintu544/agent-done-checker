@@ -4,12 +4,13 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parseArgs, stripVTControlCharacters } from "node:util";
 import { DIFF_LIMIT, TEST_OUTPUT_LIMIT } from "../../src/lib/evidence-limits";
+import { readCodexLog } from "./codex-log";
 import { parseTestCounts } from "./test-counts";
 
 const DEFAULT_API = "https://agent-done-checker.vercel.app";
 const MARKER = Buffer.from("[truncated]");
 const TEST_TIMEOUT = 10 * 60 * 1000;
-const USAGE = "Usage: adc check (--plan <file> | --plan-text <text>) --repo <path> " +
+const USAGE = "Usage: adc check (--plan <file> | --plan-text <text> | --codex-log <file>) --repo <path> " +
   "[--base <ref>] [--test-command <command>] [--api <url>]";
 
 type CaptureOptions = {
@@ -114,6 +115,7 @@ async function main() {
     options: {
       plan: { type: "string" },
       "plan-text": { type: "string" },
+      "codex-log": { type: "string" },
       repo: { type: "string" },
       base: { type: "string", default: "main" },
       "test-command": { type: "string", default: "npm test" },
@@ -126,16 +128,23 @@ async function main() {
     return;
   }
 
-  const { plan, "plan-text": inline, base, "test-command": testCommand } = values;
-  if ((plan === undefined) === (inline === undefined) || !values.repo?.trim() ||
+  const { plan, "plan-text": inline, "codex-log": codexLog, base, "test-command": testCommand } = values;
+  const sourceCount = [plan, inline, codexLog].filter((source) => source !== undefined).length;
+  if (sourceCount !== 1 || !values.repo?.trim() ||
       !base.trim() || !testCommand.trim()) {
     throw new Error(USAGE);
   }
 
   const repo = resolve(values.repo);
-  const planText = plan === undefined ? inline! : await readFile(resolve(plan), "utf8").catch(() => {
-    throw new Error(`Could not read the plan file "${plan}".`);
-  });
+  let planText: string;
+  if (codexLog !== undefined) {
+    planText = await readCodexLog(codexLog);
+    if (!planText.trim()) throw new Error(`No claims found in Codex log "${codexLog}".`);
+  } else {
+    planText = plan === undefined ? inline! : await readFile(resolve(plan), "utf8").catch(() => {
+      throw new Error(`Could not read the plan file "${plan}".`);
+    });
+  }
   if (!planText.trim() || planText.includes("\0")) {
     throw new Error("Provide a non-empty plan or transcript as plain text.");
   }
