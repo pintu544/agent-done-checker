@@ -103,12 +103,55 @@ function matchingCitations(value: unknown, sourceLines: string[]): string[] {
   return citations;
 }
 
+const VERDICT_SLICE_LIMIT = 30_000;
+
+// Rank of one file inside the verdict slice: source first, lockfiles and
+// generated files last. A large install diff (package-lock.json) used to
+// dominate the first 30 KB and push every src/ hunk out of the slice.
+function verdictFileRank(path: string): number {
+  const base = path.split("/").pop() ?? path;
+  if (/^(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|composer\.lock|Gemfile\.lock|Cargo\.lock|poetry\.lock)$/.test(base)) return 3;
+  if (/\.min\.(?:js|css)$/.test(base) || /\.map$/.test(base)) return 3;
+  if (/^(?:dist|build|coverage|node_modules|\.next)\//.test(path)) return 3;
+  if (/^(?:src|cli|app|lib|test|tests|__tests__|e2e|spec)\//.test(path)) return 0;
+  if (/\.(?:test|spec)\.[tj]sx?$/.test(base)) return 0;
+  if (/\.(?:tsx?|jsx?|mjs|mts|cts|py|go|rs|java|rb|php|cs|vue|svelte)$/.test(path)) return 1;
+  return 2;
+}
+
+// Rank the diff's per-file sections (stable: ties keep diff order) and
+// return the most relevant 30,000 characters. Diffs within the limit are
+// returned unchanged, byte-for-byte. Only the LLM prompt payload changes;
+// the deterministic C1–C4 rules still read the full diff.
+export function rankVerdictDiff(diff: string): string {
+  if (diff.length <= VERDICT_SLICE_LIMIT) return diff;
+  const parts = diff.split(/(?=^diff --git )/m);
+  if (parts.length < 2) return diff.slice(0, VERDICT_SLICE_LIMIT);
+  // parts[0] is a preamble only when it does not itself start with a
+  // header — a normal git diff starts with one, so parts[0] is a section.
+  const preamble = parts[0].startsWith("diff --git ") ? "" : parts[0];
+  const rawSections = preamble ? parts.slice(1) : parts;
+  const sections = rawSections.map((text) => {
+    const header = text.match(/^diff --git a\/(.+?) b\/(.+?)$/m);
+    return { text, rank: header ? verdictFileRank(header[2]) : 2 };
+  });
+  // Stable sort by rank (Array.prototype.sort is stable in Node ≥ 11).
+  sections.sort((a, b) => a.rank - b.rank);
+  return (preamble + sections.map((section) => section.text).join("")).slice(0, VERDICT_SLICE_LIMIT);
+}
+
 export async function verdictClaims({ claims, diff, testRun }: VerdictInput): Promise<Verdict[]> {
   if (claims.length === 0) return [];
 
   const { output, ...testSummary } = testRun;
   const buildPassed = testRun.exitCode === 0 &&
     testRun.passed === 0 && testRun.failed === 0 && testRun.skipped === 0;
+
+  // The verdict slice is the only diff the LLM sees; rank per-file
+  // sections so source files come before lockfiles/generated files, then
+  // slice to 30,000 chars. The deterministic rules below still use the
+  // FULL diff — only this prompt payload is ranked.
+  const verdictDiff = rankVerdictDiff(diff);
 
   // One LLM call per batch of claims: a single call for 30+ verdicts
   // overflows max_tokens and returns fewer verdicts than claims (seen live
@@ -130,8 +173,8 @@ Cite diff hunks as exact excerpts from the diff. For change claims, prefer excer
 For tests, copy result lines with their statuses verbatim from the test output; cite the summary line when the claim is about the whole run, and cite at least one passing test line whenever the fresh run passes. An empty evidence array means the claim is unsupported. Keep excerpts short.`,
       user: JSON.stringify({
         claims: batch,
-        diff: diff.slice(0, 30_000),
-        diffNote: diff.length > 30_000 ? "Diff truncated to its first 30,000 characters." : undefined,
+        diff: verdictDiff,
+        diffNote: diff.length > 30_000 ? "Diff truncated to its most relevant 30,000 characters — source files first." : undefined,
         testRun: { ...testSummary, buildPassed, output: output.slice(-8_000) },
       }),
       maxTokens: 16_000,
