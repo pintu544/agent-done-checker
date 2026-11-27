@@ -16,7 +16,12 @@ Monorepo, two parts. **Web app**: Next.js App Router + TypeScript on Vercel — 
 - GET /api/checks/[id] → full report { score, claims[] with verdict + evidence, testRun }.
 - GET /api/checks → list, newest first (auth from Slice 2; open in Slice 1 demo mode).
 - GET /api/health → { ok: true }.
-- POST /api/stripe/checkout, POST /api/stripe/webhook (Slice 3).
+- POST /api/stripe/checkout — GitHub session required, empty body. Returns 200 `{ url }` for $20/mo Team Checkout
+  or 200 `{ url, alreadyTeam: true }` for existing Team users. Errors return `{ error }` with 401, 404, 503, or 502.
+- POST /api/stripe/webhook — raw Stripe event body with `stripe-signature`. Returns 400 for missing or invalid signatures
+  and 503 for missing billing configuration. Verified events return 200 `{ received: true }` after any database update.
+  `checkout.session.completed` sets Team and saves the customer ID. `customer.subscription.deleted` sets Solo and retains it.
+  Duplicate deliveries for the same stored state, unmatched events, and other event types are acknowledged without changes.
 
 ## Key Decisions
 - Next.js route handlers, no standalone Express — one Vercel deployment, less ops (rejected: separate Express API — extra service, no MVP gain).
