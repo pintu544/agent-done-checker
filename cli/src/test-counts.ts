@@ -23,5 +23,26 @@ export function parseTestCounts(output: string) {
       }
     }
   }
+
+  // node:test prints its summary as `ℹ pass 70` / `ℹ fail 0` /
+  // `ℹ skipped 0` / `ℹ todo 0` lines (found live in the TogglePilot eval:
+  // 70 tests passed but the parser read 0/0/0 before this was added).
+  if (!summaries.length) {
+    for (const line of lines) {
+      const match = line.match(/^\s*ℹ\s+(pass|fail|cancelled|skipped|todo)\s+(\d+)\s*$/);
+      if (!match) continue;
+      const [, label, amount] = match;
+      switch (label) {
+        case "pass":
+          counts.passed = Number(amount);
+          break;
+        case "fail":
+          counts.failed = Number(amount);
+          break;
+        default:
+          counts.skipped += Number(amount);
+      }
+    }
+  }
   return counts;
 }

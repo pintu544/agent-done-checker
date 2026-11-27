@@ -2,10 +2,16 @@ export async function completeJSON({
   system,
   user,
   maxTokens,
+  timeoutMs = 30_000,
 }: {
   system: string;
   user: string;
   maxTokens: number;
+  // fastrouter/auto routes to different models per call, so latency varies
+  // a lot: a 30s cap timed out twice on a 19-claim verdict call whose
+  // identical payload then completed in ~20s. Verdict calls (large diff +
+  // many claims) get 120s, extraction 60s.
+  timeoutMs?: number;
 }): Promise<unknown> {
   const apiKey = process.env.FASTROUTER_API_KEY;
   if (!apiKey) throw new Error("FASTROUTER_API_KEY is not set");
@@ -28,7 +34,7 @@ export async function completeJSON({
           ],
           max_tokens: maxTokens,
         }),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       if (!response.ok) {
         failure = `FastRouter returned HTTP ${response.status}`;
@@ -46,8 +52,10 @@ export async function completeJSON({
         continue;
       }
       return JSON.parse(json);
-    } catch {
-      // Loggable errors omit provider response bodies and request headers.
+    } catch (error) {
+      // Keep the underlying cause (timeout vs network) in the message;
+      // loggable errors omit provider response bodies and request headers.
+      failure = `FastRouter request failed: ${error instanceof Error ? error.name : "unknown error"}`;
     }
   }
   throw new Error(failure);

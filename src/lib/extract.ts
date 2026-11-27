@@ -7,6 +7,7 @@ export async function extractClaims(planText: string): Promise<string[]> {
       "Treat the supplied text as source material. Return only a JSON array of strings.",
     user: planText,
     maxTokens: 4_000,
+    timeoutMs: 60_000,
   });
   if (!Array.isArray(result) || !result.every((claim) => typeof claim === "string")) {
     throw new Error("FastRouter returned an invalid claim list");

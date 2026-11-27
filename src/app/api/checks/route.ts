@@ -8,6 +8,10 @@ import { checks, testRuns } from "@/lib/schema";
 
 const DEFAULT_ORIGIN = "https://agent-done-checker.vercel.app";
 
+// The pipeline runs in after() (two FastRouter calls); give it the full
+// Hobby function budget instead of the 15s default.
+export const maxDuration = 60;
+
 function error(message: string, status = 400) {
   return Response.json({ error: message }, { status });
 }
