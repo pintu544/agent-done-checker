@@ -92,9 +92,17 @@ For tests, copy named result lines with their statuses verbatim from the test ou
         break;
     }
 
+    // A contradicted verdict's test evidence must be counter-evidence: keep
+    // only cited lines that are themselves negative (failed/skipped) test
+    // lines. A passing summary line cited for a contradicted claim is not
+    // evidence against it, so it is dropped rather than displayed.
+    const shownTests = verdict === "contradicted"
+      ? tests.filter((test) => negativeTestLines.some((line) => line.includes(test)))
+      : tests;
+
     return {
       verdict,
-      evidence: { diff_hunks, tests },
+      evidence: { diff_hunks, tests: shownTests },
       reason: verdict !== entry?.verdict && verdict === "unverified"
         ? "The cited evidence does not support the proposed verdict."
         : reason,

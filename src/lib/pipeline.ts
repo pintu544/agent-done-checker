@@ -27,9 +27,10 @@ export async function processCheck(checkId: string) {
     }
 
     const claimTexts = await extractClaims(check.planText);
-    const rows = claimTexts.map((text) => ({
+    const rows = claimTexts.map((text, position) => ({
       id: randomUUID(),
       checkId,
+      position,
       text,
       verdict: "unverified" as const,
       evidence: { diff_hunks: [], tests: [] },
@@ -42,8 +43,8 @@ export async function processCheck(checkId: string) {
 
     const verdicts = await verdictClaims({ claims: claimTexts, diff: check.diff, testRun });
     const verified = verdicts.filter(({ verdict }) => verdict === "verified").length;
-    const updates = verdicts.map(({ verdict, evidence }, index) =>
-      db.update(claims).set({ verdict, evidence }).where(eq(claims.id, rows[index].id)));
+    const updates = verdicts.map(({ verdict, evidence, reason }, index) =>
+      db.update(claims).set({ verdict, evidence: { ...evidence, reason } }).where(eq(claims.id, rows[index].id)));
     const finish = db.update(checks).set({
       status: "done",
       score: rows.length ? verified / rows.length : null,

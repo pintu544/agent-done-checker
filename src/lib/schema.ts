@@ -43,9 +43,10 @@ export const checks = pgTable("checks", {
 export const claims = pgTable("claims", {
   id: uuid().defaultRandom().primaryKey(),
   checkId: uuid("check_id").notNull().references(() => checks.id),
+  position: integer().notNull().default(0),
   text: text().notNull(),
   verdict: text({ enum: ["verified", "partial", "unverified", "contradicted"] }).notNull(),
-  evidence: jsonb().$type<{ diff_hunks: unknown[]; tests: unknown[] }>().notNull(),
+  evidence: jsonb().$type<{ diff_hunks: unknown[]; tests: unknown[]; reason?: string }>().notNull(),
 }, (table) => [
   check("claims_verdict_check", sql`${table.verdict} IN ('verified', 'partial', 'unverified', 'contradicted')`),
 ]);

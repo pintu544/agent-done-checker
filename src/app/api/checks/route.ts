@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { after } from "next/server";
+import { after, connection } from "next/server";
+import { listChecks } from "@/lib/check-reports";
 import { db } from "@/lib/db";
 import { DIFF_LIMIT, TEST_OUTPUT_LIMIT } from "@/lib/evidence-limits";
 import { processCheck } from "@/lib/pipeline";
@@ -37,6 +38,11 @@ function reportOrigin(url: string) {
     // Use the public origin if the request has no usable URL.
   }
   return DEFAULT_ORIGIN;
+}
+
+export async function GET() {
+  await connection();
+  return Response.json(await listChecks());
 }
 
 export async function POST(request: Request) {
