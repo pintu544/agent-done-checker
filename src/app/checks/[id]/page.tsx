@@ -1,7 +1,6 @@
 import { io } from "next/cache";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
 import { getCheckReport } from "@/lib/check-reports";
 import { getSessionUser } from "@/lib/session";
 import { CheckDate, StatusBadge } from "../check-details";
@@ -13,23 +12,25 @@ const verdictStyles = {
   contradicted: "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200",
 };
 
-export default function CheckPage({ params }: PageProps<"/checks/[id]">) {
-  return (
-    <main className="mx-auto w-full max-w-5xl px-5 py-10 sm:px-8">
-      <Link className="adc-link text-sm" href="/checks">All checks</Link>
-      <Suspense fallback={<p className="mt-6" role="status">Loading report…</p>}>
-        <Report params={params} />
-      </Suspense>
-    </main>
-  );
-}
-
-async function Report({ params }: Pick<PageProps<"/checks/[id]">, "params">) {
+export default async function CheckPage({ params }: PageProps<"/checks/[id]">) {
   const { id } = await params;
   await io();
   const user = await getSessionUser();
   const check = await getCheckReport(id, false, user?.id);
+  // notFound() runs before any JSX streams, so a denied report is a real
+  // HTTP 404 — not a 200 shell with a 404 slotted in (the old Suspense
+  // layout streamed the shell first and the status stayed 200).
   if (!check) notFound();
+
+  return (
+    <main className="mx-auto w-full max-w-5xl px-5 py-10 sm:px-8">
+      <Link className="adc-link text-sm" href="/checks">All checks</Link>
+      <Report check={check} />
+    </main>
+  );
+}
+
+function Report({ check }: { check: NonNullable<Awaited<ReturnType<typeof getCheckReport>>> }) {
 
   const counts = { verified: 0, partial: 0, unverified: 0, contradicted: 0 };
   for (const claim of check.claims) counts[claim.verdict]++;
