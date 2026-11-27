@@ -111,3 +111,38 @@ Verified. One claim ("Verified live against experiment 590") is Unverified.
    killed. Small checks fit comfortably. Production pipeline behaviour
    for large checks is unverified — one live check should be run against
    the production URL before demoing it.
+
+## Fix verification — T-1.7 QA failures (27 Nov 2026)
+
+QA verdict was **FAIL**: C1 false Verified on context lines (skip claim Verified in 2 of 4 runs); C2 scores 0.09–0.33 on identical evidence (`fastrouter/auto` routing). Fixes landed in commits `947a682`–`e72e026`, migration `0004` applied to Neon, `FASTROUTER_MODEL=openai/gpt-4o-mini` set on Vercel production, redeployed (health/report/list 200). Battery re-run against the local dev server (http://localhost:3100, live Neon DB + FastRouter key 2): same fixture + plan (`eval/fixtures/plan-10-claims.md`, base `b5e411e`, vitest), 3 runs, plus an M1 build-only run and an m2 trap run (`eval/fixtures/qa-m2-plan.md`). Three battery rounds were needed; round 3 is the final state.
+
+### Per-fix evidence
+
+- **C1 — change-line evidence.** `verdict.ts` requires a cited hunk to contain an added (`+`) or removed (`-`) line for Verified; verified-without-change downgrades to Partial. Plus a deterministic rule: a code token (dotted identifier / quoted literal, file paths excluded) that appears in the diff only as unchanged context means the claimed action did not happen → Contradicted with an absence marker. Battery: skip claim Contradicted in all 3 fixture runs (was Verified in 2/4 QA runs); the downgrade note names the token.
+- **C2 — pinned model.** `openai/gpt-4o-mini`, temperature 0, seed 42. Note: the dated snapshot `openai/gpt-4o-mini-2024-07-18` is listed by `/v1/models` but the chat endpoint rejects it with HTTP 400 ("not a valid model ID or no providers found") — the first battery runs failed on it (checks `15ff6224`, `927e3e94`; error stored and displayed per m3). The unversioned alias works and was the cheapest of the tested candidates. Battery: runs 1–3 IDENTICAL (10 claims, score 0.10, same verdict per claim).
+- **M1 — build-only runs.** `test_runs.exit_code` stored (the CLI already sent it); exit 0 with 0/0/0 counts = a passing build = fresh-run evidence. Verified via `node --check arithmetic.test.mjs`: comment claim Verified, score 0.10 (check `9bbdda2a`). A passing build is also recorded as fresh-run evidence for code claims generally: Verified now requires a diff change AND the CLI-measured counts (passed > 0, failed 0) or a passing build — not the model's citations, which the model sometimes forgot.
+- **M2 — raw verdicts + downgrade notes.** Raw LLM entries stored in claim evidence; the LLM's original reason is always kept; downgrades carry a "Downgraded from X to Y: cause" note rendered on the report page. Fuzzy line-level citation matching (≥half of a citation's lines must match, verbatim source lines returned). Verified on the report page (downgrade + absence markers render).
+- **M3 — extraction.** Prompt: one claim per item, no drops, comments count as claims; dedupe on normalized text + substring containment. Battery: 10/10/10 claims across the 3 fixture runs (was 9/10/11 in QA). Residual: the m2 trap plan's items were paraphrased on extraction ("The claim that all 3 tests passed is false.") — verdicts still correct; extraction wording can editorialize.
+- **m1** — absence-based Contradicted shows no hunk + "Claimed change is absent from the diff." marker (verified on the report page).
+- **m2** — vitest summary lines with a skipped count are negative test lines; "All 3 tests passed" → Contradicted (check `759ae12c`, also `1cd1cb08` in round 1). Plus a deterministic backstop from the recorded counts, and a skip-scope guard: skip-only counter-evidence does not contradict claims scoped to non-skipped/failing tests ("all non-skipped tests passed" and "no failing tests" → Partial, stable ×3).
+- **m3** — pipeline errors stored (`checks.error`) and displayed on the failed report page (verified: "FastRouter returned HTTP 400").
+- **m4** — `CheckDate` is a client component rendering in the viewer's local timezone (no "UTC" suffix).
+- **m5** — `checks.verdict_diff_truncated` set when the diff exceeds the 30,000-char verdict slice; report page shows the notice (flag path verified via migration + page code; no >30 KB diff was run in this battery).
+
+### Battery table (round 3, 27 Nov 2026)
+
+| Run | Check | Claims | Verified | Partial | Unverified | Contradicted | Score | Skip claim |
+|-----|-------|--------|----------|---------|------------|--------------|-------|-----------|
+| 1 fixture vitest | `52d43559` | 10 | 1 | 3 | 5 | 1 | 0.10 | Contradicted |
+| 2 fixture vitest | `043cf027` | 10 | 1 | 3 | 5 | 1 | 0.10 | Contradicted |
+| 3 fixture vitest | `28652505` | 10 | 1 | 3 | 5 | 1 | 0.10 | Contradicted |
+| 4 M1 node --check | `9bbdda2a` | 10 | 1 | 3 | 5 | 1 | 0.10 | Contradicted |
+| 5 m2 trap plan | `759ae12c` | 2 | 1 | 0 | 0 | 1 | 0.50 | — ("All 3 tests passed" Contradicted) |
+
+Per-claim verdicts in runs 1–3 are identical. The one Verified claim in runs 1–4 is the comment addition (diff `+` line + passing run). The pre-existing claims (addition/multiplication/division tests, package type, vitest pin) are Unverified in all runs — correctly uncredited. The T-1.6 gate criterion (genuine skip flagged Contradicted or Unverified) now holds as Contradicted in 3/3 runs.
+
+### Known limitations (not blockers for Slice 1)
+
+- Temperature 0 does not make the model bit-identical: batch composition can still shift a proposal (seen in round 2, "no failing tests" flipped Partial/Contradicted before the skip-scope guard; the guard now pins it to Partial). The deterministic rules, not the model, carry the gate-critical verdicts.
+- The pre-existing-token rule targets action claims; a preservation claim ("kept the test skipped") naming a pre-existing token would be wrongly Contradicted. No such claim appears in real agent plans; noted, not fixed.
+- The 30 KB verdict slice and the Vercel 60s budget for large checks remain as noted in the original findings; production pipeline behaviour for large checks is still unverified (needs Pintu's approval for a live production CLI run).
