@@ -5,6 +5,10 @@ import { getCheckReport } from "@/lib/check-reports";
 import { getSessionUser } from "@/lib/session";
 import { CheckDate, StatusBadge } from "../check-details";
 
+// Blocking route (Next 16 Cache Components): the ownership check must run
+// before any JSX streams, so a denied report is a real HTTP 404.
+export const instant = false;
+
 const verdictStyles = {
   verified: "bg-green-100 text-green-900 dark:bg-green-950 dark:text-green-200",
   partial: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
