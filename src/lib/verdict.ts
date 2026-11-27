@@ -2,10 +2,10 @@ import { completeJSON } from "./llm";
 
 type Verdict = {
   verdict: "verified" | "partial" | "unverified" | "contradicted";
-  evidence: { diff_hunks: string[]; tests: string[]; absence?: boolean };
+  // raw + downgrade live inside evidence so the pipeline persists them
+  // (it stores { ...evidence, reason }); top-level fields would be lost.
+  evidence: { diff_hunks: string[]; tests: string[]; absence?: boolean; raw?: unknown; downgrade?: string };
   reason: string;
-  raw?: unknown;
-  downgrade?: string;
 };
 
 type VerdictInput = {
@@ -203,9 +203,12 @@ For tests, copy named result lines with their statuses verbatim from the test ou
       evidence.tests.push(`"${testRun.command}" exited 0 (no test counts reported)`);
     }
 
-    const downgrade = cause === undefined
-      ? {}
-      : { downgrade: `Downgraded from ${String(proposedVerdict)} to ${verdict}: ${cause}` };
-    return { verdict, evidence, reason, raw, ...downgrade };
+    // raw + downgrade live inside evidence so the pipeline persists them
+    // (it stores { ...evidence, reason }); top-level fields would be lost.
+    evidence.raw = raw;
+    if (cause !== undefined) {
+      evidence.downgrade = `Downgraded from ${String(proposedVerdict)} to ${verdict}: ${cause}`;
+    }
+    return { verdict, evidence, reason };
   });
 }
