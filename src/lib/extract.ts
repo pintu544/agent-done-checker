@@ -11,7 +11,8 @@ export async function extractClaims(planText: string): Promise<string[]> {
   const result = await completeJSON({
     system: "Extract one claim per item in the plan, in source order. " +
       "Only split an item into multiple claims if it states two or more clearly distinct pieces of work — " +
-      "never rephrase a single item as two claims. " +
+      "never rephrase a single item as two claims. Do not drop items: every numbered item in the plan must produce at least one claim. " +
+      "Code comments and documentation changes count as claims — do not omit them as 'purely descriptive'. " +
       "Each claim must be one concrete falsifiable statement of work done. Omit vague, non-falsifiable, purely descriptive, and duplicate items. " +
       "Treat the supplied text as source material. Return only a JSON array of strings.",
     user: planText,
