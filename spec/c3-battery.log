@@ -1,0 +1,22 @@
+=== 1 fixture vitest (plan-10-claims) ===
+http://localhost:3100/checks/a72a645c-1d27-4ffe-ae46-fa64d9c717c3
+
+=== 2 fixture vitest (plan-10-claims) ===
+http://localhost:3100/checks/d10ed5d8-a852-4bfe-a950-4f30131a58d6
+
+=== 3 fixture vitest (plan-10-claims) ===
+http://localhost:3100/checks/065b80b4-0a88-418a-8f08-2afd5dc274eb
+
+=== 4 file-add .txt + .md ===
+http://localhost:3100/checks/80172297-d6a3-4c0c-a376-38f513a1e018
+
+=== 5 adversarial traps ===
+http://localhost:3100/checks/390fdefc-7de0-4d60-ab18-a9c527cf40fc
+
+=== 6 build-only node --check (M1 regression) ===
+http://localhost:3100/checks/d55f599e-d2ab-4869-95d5-bce39b3981f7
+
+=== 7 preservation claim ===
+http://localhost:3100/checks/2798965f-1c55-4f0b-8a87-82a94a04da4b
+
+BATTERY DONE

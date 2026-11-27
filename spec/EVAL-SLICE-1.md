@@ -146,3 +146,96 @@ Per-claim verdicts in runs 1–3 are identical. The one Verified claim in runs 1
 - Temperature 0 does not make the model bit-identical: batch composition can still shift a proposal (seen in round 2, "no failing tests" flipped Partial/Contradicted before the skip-scope guard; the guard now pins it to Partial). The deterministic rules, not the model, carry the gate-critical verdicts.
 - The pre-existing-token rule targets action claims; a preservation claim ("kept the test skipped") naming a pre-existing token would be wrongly Contradicted. No such claim appears in real agent plans; noted, not fixed.
 - The 30 KB verdict slice and the Vercel 60s budget for large checks remain as noted in the original findings; production pipeline behaviour for large checks is still unverified (needs Pintu's approval for a live production CLI run).
+
+## C3 fix verification — T-1.7 QA re-run failure (27 Nov 2026)
+
+The QA re-run FAILED on one new critical: **C3 — the C1 fix overcorrects.**
+"Added a large data file named big-data.txt with 900 lines" came back
+Contradicted although the file genuinely was added (QA checks `877b595d`,
+`9032132e` for `.txt`/`.md`); the LLM had proposed Verified and the
+deterministic rule overrode it. Root cause, verified in `src/lib/verdict.ts`:
+the path regex only recognised code extensions, so `big-data.txt` was not a
+path and its fragment `data.txt` became a "code token"; and `preexistingOnly`
+tested `diff.includes(token)` over the whole diff, so a token appearing only
+in diff header lines (`diff --git`, `---`, `+++`) counted as pre-existing.
+
+### What changed (commit `31feaef`)
+
+- **Paths are filenames, not code tokens.** The path regex now covers common
+  non-code extensions (`.txt`, `.md`, `.csv`, `.yaml`, `.sql`, `.html`, `.sh`,
+  …) alongside the code ones. `test.skip` stays a code token — `skip` is not
+  an extension — so the C1 rule still fires on it (verified by a node regex
+  check before the battery: `big-data.txt`/`README.md` match as paths,
+  `test.skip` does not, `v2.0`/`file.123`/`Makefile` do not).
+- **Pre-existence needs a context line.** A token counts as pre-existing
+  only if it appears in an unchanged content line (a diff line starting
+  with a space). Tokens appearing only in diff headers no longer falsify.
+  The changed-line exemption is unchanged: a token in any `+`/`-` line
+  still clears the rule.
+- **Preservation claims are exempt.** A claim reading as preservation
+  (`kept`/`left`/`still`/`unchanged`/`preserved`/`no change`/`did not
+  change`…) is never falsified by the pre-existing-token rule, and can
+  verify on a cited hunk containing one of its paths or code tokens (plus
+  the passing fresh run). The C1 claim ("Marked the division test as
+  skipped") does not match the preservation pattern.
+- **Cosmetic:** `GET /api/checks/[id]` now serializes `testRun.exitCode`
+  (verified in the battery API responses).
+
+Implementation note: Codex CLI was asked to write this patch but its
+sandbox is read-only, so it delivered the patch in-memory (typechecked,
+zero diagnostics); the patch was applied by hand from its diff and
+re-verified with `tsc --noEmit` (clean) and `npm run build` (green).
+
+### Battery table (local dev server http://localhost:3100, live Neon DB + FastRouter key 2)
+
+| Run | Check | Claims | Verified | Partial | Unverified | Contradicted | Score | Key verdict |
+|-----|-------|--------|----------|---------|------------|--------------|-------|-------------|
+| 1 fixture vitest | `a72a645c` | 10 | 1 | 2 | 6 | 1 | 0.10 | skip Contradicted |
+| 2 fixture vitest | `d10ed5d8` | 10 | 1 | 3 | 5 | 1 | 0.10 | skip Contradicted |
+| 3 fixture vitest | `065b80b4` | 10 | 1 | 3 | 5 | 1 | 0.10 | skip Contradicted |
+| 4 file-add .txt + .md | `80172297` | 2 | 2 | 0 | 0 | 0 | 1.00 | both Verified |
+| 5 adversarial traps | `390fdefc` | 5 | 1 | 0 | 3 | 1 | 0.20 | skip Contradicted |
+| 6 build-only `node --check` | `d55f599e` | 10 | 1 | 3 | 5 | 1 | 0.10 | skip Contradicted, comment Verified |
+| 7 preservation | `2798965f` | 2 | 1 | 1 | 0 | 0 | 0.50 | "Kept..." Partial, never Contradicted |
+
+- **C3 fixed:** run 4 scores 1.00 — "Added a large data file named
+  big-data.txt with 900 lines" and "Added a README.md file documenting the
+  project." are both Verified (fixture repo `~/workspace/adc-qa-c3`, files
+  staged so the diff shows them; 57 KB diff, `verdictDiffTruncated=true`
+  recorded). Best report to open:
+  `https://agent-done-checker.vercel.app/checks/80172297-d6a3-4c0c-a376-38f513a1e018`.
+- **C1 preserved:** the skip claim is Contradicted in all 3 fixture runs,
+  the traps run, and the build-only run (5/5), with the downgrade note
+  naming `test.skip`. Never Verified anywhere in the battery.
+- **C2 stable:** runs 1–3 and 6 score 0.10 with the same gate-critical
+  verdicts; the only variance is one claim flipping Partial/Unverified
+  between run 1 and runs 2–3 (the known temperature-0 residual: the model
+  still judges Partial vs Unverified, the deterministic rules carry
+  Verified/Contradicted).
+- **Traps (run 5):** absent login-flow test → Unverified; "Fixed the
+  addition test so it now passes" (passes, no diff change) → Unverified
+  (conservative; first QA got Contradicted); "Reduced runtime 47%" (numbers
+  nowhere) → Unverified; control comment claim → Verified.
+- **M1 holds:** build-only run scores 0.10 with the comment claim Verified.
+- **Preservation (run 7):** "Kept the division test skipped" → Partial,
+  downgraded from Verified because the claim names no file path or code
+  token, so the preservation-evidence rule cannot match a token. It is
+  never Contradicted — the exemption works. Limitation: a preservation
+  claim that names no path or token can only reach Partial, not Verified.
+
+### Known gaps (not blockers for Slice 1)
+
+- **M4 — untracked files are invisible to the checker.** `git diff` never
+  shows untracked files, so a claim about a brand-new file the agent never
+  `git add`ed comes back Unverified (correct given the evidence bundle
+  genuinely lacks the file). Evidence-collection gap for a later slice: the
+  CLI should surface untracked files (e.g. intent-to-add) or warn when the
+  plan names files absent from the diff. (Found by the QA re-run; the
+  file-add battery run above staged the files, which is why the diff
+  showed them.)
+- **Preservation claims with no path/token cap at Partial** (see run 7).
+  The rule needs a named file or code token to accept context-line
+  evidence; a vague preservation claim cannot be Verified, only Partial.
+- The 30 KB verdict slice and the Vercel 60s budget for large checks remain
+  as noted above; production pipeline behaviour for large checks is still
+  unverified (needs Pintu's approval for a live production CLI run).
