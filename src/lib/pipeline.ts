@@ -1,26 +1,66 @@
+import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "./db";
-import { checks } from "./schema";
+import { extractClaims } from "./extract";
+import { checks, claims, testRuns } from "./schema";
+import { verdictClaims } from "./verdict";
 
 export async function processCheck(checkId: string) {
-  const transitions = [
-    ["received", "extracting"],
-    ["extracting", "verdicting"],
-    ["verdicting", "done"],
-  ] as const;
+  const checkAt = (status: typeof checks.$inferSelect.status) =>
+    and(eq(checks.id, checkId), eq(checks.status, status));
 
   try {
-    // Slice 1 placeholder. Claim extraction and verdicts are implemented later.
-    for (const [from, to] of transitions) {
-      const [updated] = await db.update(checks).set({ status: to })
-        .where(and(eq(checks.id, checkId), eq(checks.status, from)))
-        .returning({ id: checks.id });
-      if (!updated) return;
+    const [check] = await db.update(checks).set({ status: "extracting" })
+      .where(checkAt("received"))
+      .returning({ planText: checks.planText, diff: checks.diff });
+    if (!check) return;
+
+    const [testRun] = await db.select({
+      command: testRuns.command,
+      passed: testRuns.passed,
+      failed: testRuns.failed,
+      skipped: testRuns.skipped,
+      output: testRuns.outputTruncated,
+    }).from(testRuns).where(eq(testRuns.checkId, checkId)).limit(1);
+    if (!testRun || check.planText === null || check.diff === null) {
+      throw new Error("Check is missing its plan, diff, or test run");
     }
-  } catch {
-    await db.update(checks).set({ status: "failed" }).where(and(
-      eq(checks.id, checkId),
-      inArray(checks.status, ["received", "extracting", "verdicting"]),
-    ));
+
+    const claimTexts = await extractClaims(check.planText);
+    const rows = claimTexts.map((text) => ({
+      id: randomUUID(),
+      checkId,
+      text,
+      verdict: "unverified" as const,
+      evidence: { diff_hunks: [], tests: [] },
+    }));
+    if (rows.length) await db.insert(claims).values(rows);
+
+    const [advanced] = await db.update(checks).set({ status: "verdicting" })
+      .where(checkAt("extracting")).returning({ id: checks.id });
+    if (!advanced) return;
+
+    const verdicts = await verdictClaims({ claims: claimTexts, diff: check.diff, testRun });
+    const verified = verdicts.filter(({ verdict }) => verdict === "verified").length;
+    const updates = verdicts.map(({ verdict, evidence }, index) =>
+      db.update(claims).set({ verdict, evidence }).where(eq(claims.id, rows[index].id)));
+    const finish = db.update(checks).set({
+      status: "done",
+      score: rows.length ? verified / rows.length : null,
+    }).where(checkAt("verdicting"));
+
+    // Publish the verdicts and score together.
+    await db.batch([finish, ...updates]);
+  } catch (error) {
+    console.error("Check processing failed", checkId, error instanceof Error ? error.message : String(error));
+    try {
+      await db.update(checks).set({ status: "failed" }).where(and(
+        eq(checks.id, checkId),
+        inArray(checks.status, ["received", "extracting", "verdicting"]),
+      ));
+    } catch (statusError) {
+      console.error("Could not mark check failed", checkId,
+        statusError instanceof Error ? statusError.message : String(statusError));
+    }
   }
 }
