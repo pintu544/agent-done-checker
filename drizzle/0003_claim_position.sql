@@ -1,1 +1,1 @@
-ALTER TABLE claims ADD COLUMN position integer NOT NULL DEFAULT 0;
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
