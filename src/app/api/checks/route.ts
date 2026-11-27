@@ -71,7 +71,7 @@ export async function POST(request: Request) {
   }
   if (!isObject(testRun)) return error("Provide a testRun object.");
 
-  const { command, passed, failed, skipped, durationMs, output } = testRun;
+  const { command, passed, failed, skipped, durationMs, output, exitCode } = testRun;
   if (!isRequiredText(command) || !isText(output)) {
     return error("Provide testRun.command as non-empty text and testRun.output as text.");
   }
@@ -79,6 +79,11 @@ export async function POST(request: Request) {
   if (!isNonnegativeInteger(passed) || !isNonnegativeInteger(failed) ||
       !isNonnegativeInteger(skipped) || !isNonnegativeInteger(durationMs)) {
     return error("Test counts and durationMs must be integers between 0 and 2147483647.");
+  }
+
+  if (exitCode !== undefined && exitCode !== null &&
+      (!isNonnegativeInteger(exitCode) || exitCode > 255)) {
+    return error("testRun.exitCode must be null or an integer between 0 and 255.");
   }
 
   const checkId = randomUUID();
@@ -90,7 +95,7 @@ export async function POST(request: Request) {
         planText, diff, diffTruncated: truncated ?? false, status: "received",
       }),
       db.insert(testRuns).values({
-        checkId, command, passed, failed, skipped, durationMs, outputTruncated: output,
+        checkId, command, passed, failed, skipped, durationMs, exitCode, outputTruncated: output,
       }),
     ]);
   } catch {

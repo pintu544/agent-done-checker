@@ -15,11 +15,18 @@ export async function processCheck(checkId: string) {
       .returning({ planText: checks.planText, diff: checks.diff });
     if (!check) return;
 
+    if (check.diff !== null) {
+      // Keep this limit in sync with the verdict diff slice in verdict.ts.
+      await db.update(checks).set({ verdictDiffTruncated: check.diff.length > 30_000 })
+        .where(checkAt("extracting"));
+    }
+
     const [testRun] = await db.select({
       command: testRuns.command,
       passed: testRuns.passed,
       failed: testRuns.failed,
       skipped: testRuns.skipped,
+      exitCode: testRuns.exitCode,
       output: testRuns.outputTruncated,
     }).from(testRuns).where(eq(testRuns.checkId, checkId)).limit(1);
     if (!testRun || check.planText === null || check.diff === null) {
@@ -53,9 +60,10 @@ export async function processCheck(checkId: string) {
     // Publish the verdicts and score together.
     await db.batch([finish, ...updates]);
   } catch (error) {
-    console.error("Check processing failed", checkId, error instanceof Error ? error.message : String(error));
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Check processing failed", checkId, message);
     try {
-      await db.update(checks).set({ status: "failed" }).where(and(
+      await db.update(checks).set({ status: "failed", error: message.slice(0, 1000) }).where(and(
         eq(checks.id, checkId),
         inArray(checks.status, ["received", "extracting", "verdicting"]),
       ));

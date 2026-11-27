@@ -1,11 +1,20 @@
+"use client";
+
+import { useSyncExternalStore } from "react";
+
 const dateFormat = new Intl.DateTimeFormat("en", {
   dateStyle: "medium",
   timeStyle: "short",
-  timeZone: "UTC",
 });
 
+// Format after hydration so the displayed date uses the browser timezone.
+const subscribe = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
+
 export function CheckDate({ date }: { date: Date }) {
-  return <time dateTime={date.toISOString()}>{dateFormat.format(date)} UTC</time>;
+  const isClient = useSyncExternalStore(subscribe, getClientSnapshot, getServerSnapshot);
+  return <time dateTime={date.toISOString()}>{isClient ? dateFormat.format(date) : null}</time>;
 }
 
 export function StatusBadge({ status }: { status: string }) {

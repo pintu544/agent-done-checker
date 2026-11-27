@@ -32,6 +32,8 @@ export const checks = pgTable("checks", {
   planText: text("plan_text"),
   diff: text(),
   diffTruncated: boolean("diff_truncated").notNull().default(false),
+  verdictDiffTruncated: boolean("verdict_diff_truncated").notNull().default(false),
+  error: text(),
   status: text({ enum: ["received", "extracting", "verdicting", "done", "failed"] })
     .notNull().default("received"),
   score: doublePrecision(),
@@ -46,7 +48,14 @@ export const claims = pgTable("claims", {
   position: integer().notNull().default(0),
   text: text().notNull(),
   verdict: text({ enum: ["verified", "partial", "unverified", "contradicted"] }).notNull(),
-  evidence: jsonb().$type<{ diff_hunks: unknown[]; tests: unknown[]; reason?: string }>().notNull(),
+  evidence: jsonb().$type<{
+    diff_hunks: unknown[];
+    tests: unknown[];
+    reason?: string;
+    raw?: unknown;
+    downgrade?: string;
+    absence?: boolean;
+  }>().notNull(),
 }, (table) => [
   check("claims_verdict_check", sql`${table.verdict} IN ('verified', 'partial', 'unverified', 'contradicted')`),
 ]);
@@ -59,6 +68,7 @@ export const testRuns = pgTable("test_runs", {
   failed: integer().notNull(),
   skipped: integer().notNull(),
   durationMs: integer("duration_ms").notNull(),
+  exitCode: integer("exit_code"),
   outputTruncated: text("output_truncated").notNull(),
 }, (table) => [
   check("test_runs_output_truncated_check", sql`octet_length(${table.outputTruncated}) <= 204800`),

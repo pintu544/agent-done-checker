@@ -48,7 +48,14 @@ async function Report({ params }: Pick<PageProps<"/checks/[id]">, "params">) {
       </header>
 
       {processing && <p role="status" className="mt-6 text-sm">Check still processing — refresh to update</p>}
-      {check.status === "failed" && <p className="mt-6 text-sm">This check failed during processing</p>}
+      {check.status === "failed" && (
+        <p className="mt-6 text-sm wrap-anywhere">
+          This check failed during processing{check.error && `: ${check.error}`}
+        </p>
+      )}
+      {check.verdictDiffTruncated && (
+        <p className="mt-6 text-sm">Verdict based on the first 30,000 characters of the diff — the full diff was longer.</p>
+      )}
 
       <section aria-label="Verification score" className="mt-8 border-y border-zinc-200 py-6 dark:border-zinc-800">
         <p className="flex flex-wrap items-baseline gap-x-3">
@@ -91,6 +98,9 @@ async function Report({ params }: Pick<PageProps<"/checks/[id]">, "params">) {
                     {verdict}
                   </span>
                   <h3 className="mt-2 max-w-prose whitespace-pre-wrap font-medium">{text}</h3>
+                  {evidence.absence === true && (
+                    <p className="mt-2 text-sm">Claimed change is absent from the diff.</p>
+                  )}
                   {hunks.length > 0 && (
                     <div className="mt-4">
                       <h4 className="text-sm font-medium">Cited diff hunks</h4>
@@ -109,6 +119,11 @@ async function Report({ params }: Pick<PageProps<"/checks/[id]">, "params">) {
                   {evidence.reason?.trim() && (
                     <p className="mt-3 max-w-prose text-sm text-zinc-600 dark:text-zinc-400">
                       <span className="font-medium">Reason</span> · {evidence.reason}
+                    </p>
+                  )}
+                  {evidence.downgrade?.trim() && (
+                    <p className="mt-3 max-w-prose text-sm text-zinc-600 dark:text-zinc-400">
+                      <span className="font-medium">Downgrade</span> · {evidence.downgrade}
                     </p>
                   )}
                 </li>
