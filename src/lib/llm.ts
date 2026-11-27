@@ -1,3 +1,10 @@
+// Pinned model (QA C2): fastrouter/auto routes to different models per
+// call, so identical evidence scored 0.09–0.33 across runs. Pin the dated
+// gpt-4o-mini snapshot (frozen weights — it cannot be silently swapped)
+// with temperature 0 and a fixed seed for reproducible verdicts.
+// FASTROUTER_MODEL may override the pin.
+const MODEL = process.env.FASTROUTER_MODEL || "openai/gpt-4o-mini-2024-07-18";
+
 export async function completeJSON({
   system,
   user,
@@ -27,12 +34,14 @@ export async function completeJSON({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: process.env.FASTROUTER_MODEL || "fastrouter/auto",
+          model: MODEL,
           messages: [
             { role: "system", content: system },
             { role: "user", content: user },
           ],
           max_tokens: maxTokens,
+          temperature: 0,
+          seed: 42,
         }),
         signal: AbortSignal.timeout(timeoutMs),
       });
